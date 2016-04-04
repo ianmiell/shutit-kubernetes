@@ -115,7 +115,7 @@ class shutit_kubernetes(ShutItModule):
 
 def module():
 	return shutit_kubernetes(
-		'tk.shutit.shutit_kubernetes', 1845506479.0001,
+		'tk.shutit.shutit_kubernetes', 1845506479.0001125135135,
 		description='',
 		maintainer='',
 		delivery_methods=['bash'],
