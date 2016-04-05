@@ -83,16 +83,16 @@ class shutit_kubernetes(ShutItModule):
 		shutit.send('apt-get update')
 		#http://kubernetes.io/docs/getting-started-guides/docker/
 		shutit.install('docker.io')
-		shutit.send('export K8S_VERSION=1.2.0')
-		shutit.send('''docker run --volume=/:/rootfs:ro --volume=/sys:/sys:ro --volume=/var/lib/docker/:/var/lib/docker:rw --volume=/var/lib/kubelet/:/var/lib/kubelet:rw --volume=/var/run:/var/run:rw --net=host --pid=host --privileged=true --name=kubelet -d gcr.io/google_containers/hyperkube-amd64:v${K8S_VERSION} /hyperkube kubelet --containerized --hostname-override="127.0.0.1" --address="0.0.0.0" --api-servers=http://localhost:8080 --config=/etc/kubernetes/manifests --cluster-dns=10.0.0.10 --cluster-domain=cluster.local --allow-privileged=true --v=2''')
+		shutit.send('export K8S_VERSION=' + shutit.cfg[self.module_id]['kubernetes_version'])
+		shutit.send('''docker run --volume=/:/rootfs:ro --volume=/sys:/sys:ro --volume=/var/lib/docker/:/var/lib/docker:rw --volume=/var/lib/kubelet/:/var/lib/kubelet:rw --volume=/var/run:/var/run:rw --net=host --pid=host --privileged=true --name=kubelet -d gcr.io/google_containers/hyperkube-amd64:v${K8S_VERSION} /hyperkube kubelet --containerized --hostname-override="127.0.0.1" --address="0.0.0.0" --api-servers=http://localhost:8080 --config=/etc/kubernetes/manifests --cluster-dns=10.0.0.10 --cluster-domain=cluster.local --allow-privileged=true --v=2''',note='Start the hyperkube docker image as a kubelet.')
 		shutit.send('wget http://storage.googleapis.com/kubernetes-release/release/v${K8S_VERSION}/bin/linux/amd64/kubectl')
 		shutit.send('chmod +x kubectl')
 		shutit.send('export PATH=$PATH:$(pwd)')
 		shutit.send('kubectl version',check_exit=False)
-		shutit.send_until('./kubectl get pods','.*Running.*')
-		shutit.send('docker run -d --net=host --privileged gcr.io/google_containers/hyperkube:v0.14.1 /hyperkube proxy --master=http://127.0.0.1:8080 --v=2')
-		shutit.send('kubectl -s http://localhost:8080 run-container todopod --image=dockerinpractice/todo --port=8000')
-		shutit.send_until('./kubectl get pods','todo.*Running')
+		shutit.send_until('kubectl get pods','.*Running.*',note='Wait until the pods are started up')
+		shutit.send('docker run -d --net=host --privileged gcr.io/google_containers/hyperkube:v0.14.1 /hyperkube proxy --master=http://127.0.0.1:8080 --v=2',note='Start the hyperkube proxy')
+		shutit.send('kubectl -s http://localhost:8080 run-container todopod --image=dockerinpractice/todo --port=8000',note='Start up a simple todo app')
+		shutit.send_until('./kubectl get pods','todo.*Running',note='Get the pod name of our new pod.')
 		podname = shutit.send_and_get_output("""./kubectl get pods | grep todo | awk '{print $1}'""")
 		shutit.send('kubectl expose pod ' + podname + ' --target-port=8000 --port=80')
 		shutit.send('kubectl get service')
@@ -118,6 +118,7 @@ class shutit_kubernetes(ShutItModule):
 		# shutit.cfg[self.module_id]['myconfig']
 		shutit.get_config(self.module_id,'vagrant_image',default='ubuntu/trusty64')
 		shutit.get_config(self.module_id,'vagrant_provider',default='virtualbox')
+		shutit.get_config(self.module_id,'kubernetes_version',default='1.2.0')
 		return True
 
 def module():
