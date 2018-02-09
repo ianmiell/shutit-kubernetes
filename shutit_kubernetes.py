@@ -1,131 +1,141 @@
-"""ShutIt module. See http://shutit.tk
-"""
-
-from shutit_module import ShutItModule
 import random
+import logging
 import string
+import os
+import inspect
+from shutit_module import ShutItModule
 
 class shutit_kubernetes(ShutItModule):
 
+
 	def build(self, shutit):
-		# Some useful API calls for reference. See shutit's docs for more info and options:
-		#
-		# ISSUING BASH COMMANDS
-		# shutit.send(send,expect=<default>) - Send a command, wait for expect (string or compiled regexp)
-		#                                      to be seen before continuing. By default this is managed
-		#                                      by ShutIt with shell prompts.
-		# shutit.multisend(send,send_dict)   - Send a command, dict contains {expect1:response1,expect2:response2,...}
-		# shutit.send_and_get_output(send)   - Returns the output of the sent command
-		# shutit.send_and_match_output(send, matches)
-		#                                    - Returns True if any lines in output match any of
-		#                                      the regexp strings in the matches list
-		# shutit.send_until(send,regexps)    - Send command over and over until one of the regexps seen in the output.
-		# shutit.run_script(script)          - Run the passed-in string as a script
-		# shutit.install(package)            - Install a package
-		# shutit.remove(package)             - Remove a package
-		# shutit.login(user='root', command='su -')
-		#                                    - Log user in with given command, and set up prompt and expects.
-		#                                      Use this if your env (or more specifically, prompt) changes at all,
-		#                                      eg reboot, bash, ssh
-		# shutit.logout(command='exit')      - Clean up from a login.
-		#
-		# COMMAND HELPER FUNCTIONS
-		# shutit.add_to_bashrc(line)         - Add a line to bashrc
-		# shutit.get_url(fname, locations)   - Get a file via url from locations specified in a list
-		# shutit.get_ip_address()            - Returns the ip address of the target
-		# shutit.command_available(command)  - Returns true if the command is available to run
-		#
-		# LOGGING AND DEBUG
-		# shutit.log(msg,add_final_message=False) -
-		#                                      Send a message to the log. add_final_message adds message to
-		#                                      output at end of build
-		# shutit.pause_point(msg='')         - Give control of the terminal to the user
-		# shutit.step_through(msg='')        - Give control to the user and allow them to step through commands
-		#
-		# SENDING FILES/TEXT
-		# shutit.send_file(path, contents)   - Send file to path on target with given contents as a string
-		# shutit.send_host_file(path, hostfilepath)
-		#                                    - Send file from host machine to path on the target
-		# shutit.send_host_dir(path, hostfilepath)
-		#                                    - Send directory and contents to path on the target
-		# shutit.insert_text(text, fname, pattern)
-		#                                    - Insert text into file fname after the first occurrence of
-		#                                      regexp pattern.
-		# shutit.delete_text(text, fname, pattern)
-		#                                    - Delete text from file fname after the first occurrence of
-		#                                      regexp pattern.
-		# shutit.replace_text(text, fname, pattern)
-		#                                    - Replace text from file fname after the first occurrence of
-		#                                      regexp pattern.
-		# ENVIRONMENT QUERYING
-		# shutit.host_file_exists(filename, directory=False)
-		#                                    - Returns True if file exists on host
-		# shutit.file_exists(filename, directory=False)
-		#                                    - Returns True if file exists on target
-		# shutit.user_exists(user)           - Returns True if the user exists on the target
-		# shutit.package_installed(package)  - Returns True if the package exists on the target
-		# shutit.set_password(password, user='')
-		#                                    - Set password for a given user on target
-		#
-		# USER INTERACTION
-		# shutit.get_input(msg,default,valid[],boolean?,ispass?)
-		#                                    - Get input from user and return output
-		# shutit.fail(msg)                   - Fail the program and exit with status 1
-		#
+		shutit.run_script('''#!/bin/bash
+MODULE_NAME=shutit_kubernetes
+rm -rf $( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/vagrant_run/*
+if [[ $(command -v VBoxManage) != '' ]]
+then
+	while true
+	do
+		VBoxManage list runningvms | grep ${MODULE_NAME} | awk '{print $1}' | xargs -IXXX VBoxManage controlvm 'XXX' poweroff && VBoxManage list vms | grep shutit_kubernetes | awk '{print $1}'  | xargs -IXXX VBoxManage unregistervm 'XXX' --delete
+		# The xargs removes whitespace
+		if [[ $(VBoxManage list vms | grep ${MODULE_NAME} | wc -l | xargs) -eq '0' ]]
+		then
+			break
+		else
+			ps -ef | grep virtualbox | grep ${MODULE_NAME} | awk '{print $2}' | xargs kill
+			sleep 10
+		fi
+	done
+fi
+if [[ $(command -v virsh) ]] && [[ $(kvm-ok 2>&1 | command grep 'can be used') != '' ]]
+then
+	virsh list | grep ${MODULE_NAME} | awk '{print $1}' | xargs -n1 virsh destroy
+fi
+''')
 		vagrant_image = shutit.cfg[self.module_id]['vagrant_image']
 		vagrant_provider = shutit.cfg[self.module_id]['vagrant_provider']
-		module_name = 'shutit_kubernetes' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(6))
-		shutit.send('rm -rf /tmp/' + module_name + ' && mkdir -p /tmp/' + module_name + ' && cd /tmp/' + module_name)
+		gui = shutit.cfg[self.module_id]['gui']
+		memory = shutit.cfg[self.module_id]['memory']
+		shutit.build['vagrant_run_dir'] = os.path.dirname(os.path.abspath(inspect.getsourcefile(lambda:0))) + '/vagrant_run'
+		shutit.build['module_name'] = 'shutit_kubernetes_' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(6))
+		shutit.build['this_vagrant_run_dir'] = shutit.build['vagrant_run_dir'] + '/' + shutit.build['module_name']
+		shutit.send(' command rm -rf ' + shutit.build['this_vagrant_run_dir'] + ' && command mkdir -p ' + shutit.build['this_vagrant_run_dir'] + ' && command cd ' + shutit.build['this_vagrant_run_dir'])
+		shutit.send('command rm -rf ' + shutit.build['this_vagrant_run_dir'] + ' && command mkdir -p ' + shutit.build['this_vagrant_run_dir'] + ' && command cd ' + shutit.build['this_vagrant_run_dir'])
+		if shutit.send_and_get_output('vagrant plugin list | grep landrush') == '':
+			shutit.send('vagrant plugin install landrush')
 		shutit.send('vagrant init ' + vagrant_image)
-		shutit.send('vagrant up --provider virtualbox',timeout=99999)
-		shutit.login(command='vagrant ssh')
-		shutit.login(command='sudo su -',password='vagrant')
-		shutit.send('apt-get update')
-		#http://kubernetes.io/docs/getting-started-guides/docker/
-		shutit.install('docker.io')
-		shutit.send('export K8S_VERSION=' + shutit.cfg[self.module_id]['kubernetes_version'])
-		shutit.send('''docker run --volume=/:/rootfs:ro --volume=/sys:/sys:ro --volume=/var/lib/docker/:/var/lib/docker:rw --volume=/var/lib/kubelet/:/var/lib/kubelet:rw --volume=/var/run:/var/run:rw --net=host --pid=host --privileged=true --name=kubelet -d gcr.io/google_containers/hyperkube-amd64:v${K8S_VERSION} /hyperkube kubelet --containerized --hostname-override="127.0.0.1" --address="0.0.0.0" --api-servers=http://localhost:8080 --config=/etc/kubernetes/manifests --cluster-dns=10.0.0.10 --cluster-domain=cluster.local --allow-privileged=true --v=2''',note='Start the hyperkube docker image as a kubelet.')
-		shutit.send('wget http://storage.googleapis.com/kubernetes-release/release/v${K8S_VERSION}/bin/linux/amd64/kubectl')
-		shutit.send('chmod +x kubectl')
-		shutit.send('export PATH=$PATH:$(pwd)')
-		shutit.send('kubectl version',check_exit=False)
-		shutit.send_until('kubectl get pods','.*Running.*',note='Wait until the pods are started up')
-		shutit.send('docker run -d --net=host --privileged gcr.io/google_containers/hyperkube:v0.14.1 /hyperkube proxy --master=http://127.0.0.1:8080 --v=2',note='Start the hyperkube proxy')
-		shutit.send('kubectl -s http://localhost:8080 run-container todopod --image=dockerinpractice/todo --port=8000',note='Start up a simple todo app')
-		shutit.send_until('./kubectl get pods','todo.*Running',note='Get the pod name of our new pod.')
-		podname = shutit.send_and_get_output("""./kubectl get pods | grep todo | awk '{print $1}'""")
-		shutit.send('kubectl expose pod ' + podname + ' --target-port=8000 --port=80')
-		shutit.send('kubectl get service')
-		shutit.get_url('skydns.yaml.in',['http://kubernetes.io/docs/getting-started-guides/docker-multinode'])
-		shutit.get_url('kube-system.yaml',['http://kubernetes.io/docs/getting-started-guides/docker-multinode'])
-		shutit.send('export DNS_REPLICAS=1')
-		shutit.send('export DNS_DOMAIN=cluster.local # specify in startup parameter `--cluster-domain` for containerized kubelet ')
-		shutit.send('export DNS_SERVER_IP=10.0.0.10  # specify in startup parameter `--cluster-dns` for containerized kubelet ')
-		shutit.send('''sed -e "s/{{ pillar\['dns_replicas'\] }}/${DNS_REPLICAS}/g;s/{{ pillar\['dns_domain'\] }}/${DNS_DOMAIN}/g;s/{{ pillar\['dns_server'\] }}/${DNS_SERVER_IP}/g" skydns.yaml.in > ./skydns.yaml''')
-		shutit.send('kubectl create -f ./kube-system.yaml')
-		shutit.send('kubectl create -f ./skydns.yaml')
+		shutit.send_file(shutit.build['this_vagrant_run_dir'] + '/Vagrantfile','''Vagrant.configure("2") do |config|
+  config.landrush.enabled = true
+  config.vm.provider "virtualbox" do |vb|
+    vb.gui = ''' + gui + '''
+    vb.memory = "''' + memory + '''"
+  end
+
+  config.vm.define "kubernetes1" do |kubernetes1|
+    kubernetes1.vm.box = ''' + '"' + vagrant_image + '"' + '''
+    kubernetes1.vm.hostname = "kubernetes1.vagrant.test"
+    config.vm.provider :virtualbox do |vb|
+      vb.name = "shutit_kubernetes_1"
+    end
+  end
+end''')
+		pw = shutit.get_env_pass()
+		try:
+			shutit.multisend('vagrant up --provider ' + shutit.cfg['shutit-library.virtualization.virtualization.virtualization']['virt_method'] + " kubernetes1",{'assword for':pw,'assword:':pw},timeout=99999)
+		except NameError:
+			shutit.multisend('vagrant up kubernetes1',{'assword for':pw,'assword:':pw},timeout=99999)
+		if shutit.send_and_get_output("""vagrant status | grep -w ^kubernetes1 | awk '{print $2}'""") != 'running':
+			shutit.pause_point("machine: kubernetes1 appears not to have come up cleanly")
+
+
+		# machines is a dict of dicts containing information about each machine for you to use.
+		machines = {}
+		machines.update({'kubernetes1':{'fqdn':'kubernetes1.vagrant.test'}})
+		ip = shutit.send_and_get_output('''vagrant landrush ls 2> /dev/null | grep -w ^''' + machines['kubernetes1']['fqdn'] + ''' | awk '{print $2}' ''')
+		machines.get('kubernetes1').update({'ip':ip})
+
+
+		for machine in sorted(machines.keys()):
+			shutit.login(command='vagrant ssh ' + machine,check_sudo=False)
+			shutit.login(command='sudo su -',password='vagrant',check_sudo=False)
+			# Workaround for docker networking issues + landrush.
+			shutit.install('docker')
+			shutit.insert_text('Environment=GODEBUG=netdns=cgo','/lib/systemd/system/docker.service',pattern='.Service.')
+			shutit.send('mkdir -p /etc/docker',note='Create the docker config folder')
+			shutit.send_file('/etc/docker/daemon.json',"""{
+  "dns": ["8.8.8.8"]
+}""",note='Use the google dns server rather than the vagrant one. Change to the value you want if this does not work, eg if google dns is blocked.')
+			shutit.send('systemctl daemon-reload && systemctl restart docker')
+			shutit.logout()
+			shutit.logout()
+		shutit.login(command='vagrant ssh ' + sorted(machines.keys())[0],check_sudo=False)
+		shutit.login(command='sudo su -',password='vagrant',check_sudo=False)
+		shutit.install('etcd')
+		shutit.install('golang')
+		shutit.install('openssl')
+		shutit.send('export GOPATH=/opt/go')                                                                                                                                 
+		shutit.send('export PATH=$PATH:/opt/go/bin')  
+		shutit.send('go get -u github.com/cloudflare/cfssl/cmd/...')
+		shutit.send('PATH=$PATH:$GOPATH/bin')
+		shutit.pause_point('')
 		shutit.logout()
 		shutit.logout()
+		shutit.log('''Vagrantfile created in: ''' + shutit.build['this_vagrant_run_dir'],add_final_message=True,level=logging.DEBUG)
+		shutit.log('''Run:
+
+	cd ''' + shutit.build['this_vagrant_run_dir'] + ''' && vagrant status && vagrant landrush ls
+
+To get a picture of what has been set up.''',add_final_message=True,level=logging.DEBUG)
 		return True
 
+
 	def get_config(self, shutit):
-		# CONFIGURATION
-		# shutit.get_config(module_id,option,default=None,boolean=False)
-		#                                    - Get configuration value, boolean indicates whether the item is
-		#                                      a boolean type, eg get the config with:
-		# shutit.get_config(self.module_id, 'myconfig', default='a value')
-		#                                      and reference in your code with:
-		# shutit.cfg[self.module_id]['myconfig']
-		shutit.get_config(self.module_id,'vagrant_image',default='ubuntu/trusty64')
+		shutit.get_config(self.module_id,'vagrant_image',default='ubuntu/xenial64')
 		shutit.get_config(self.module_id,'vagrant_provider',default='virtualbox')
-		shutit.get_config(self.module_id,'kubernetes_version',default='1.2.0')
+		shutit.get_config(self.module_id,'gui',default='false')
+		shutit.get_config(self.module_id,'memory',default='1024')
+		return True
+
+	def test(self, shutit):
+		return True
+
+	def finalize(self, shutit):
+		return True
+
+	def is_installed(self, shutit):
+		return False
+
+	def start(self, shutit):
+		return True
+
+	def stop(self, shutit):
 		return True
 
 def module():
 	return shutit_kubernetes(
-		'tk.shutit.shutit_kubernetes', 1845506479.0001125135135,
+		'git.shutit_kubernetes.shutit_kubernetes', 2119562175.0001,
 		description='',
 		maintainer='',
 		delivery_methods=['bash'],
-		depends=['shutit.tk.setup','shutit-library.virtualbox.virtualbox.virtualbox','tk.shutit.vagrant.vagrant.vagrant']
+		depends=['shutit.tk.setup','shutit-library.virtualization.virtualization.virtualization','tk.shutit.vagrant.vagrant.vagrant']
 	)

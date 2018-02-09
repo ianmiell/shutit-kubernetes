@@ -7,5 +7,5 @@
 ###############################################################################
 # When this module is the one being built, which modules should be built along with it by default?
 # This feeds into automated testing of each module.
-[tk.shutit.shutit_kubernetes]
+[git.shutit_kubernetes.shutit_kubernetes]
 shutit.core.module.build:yes
