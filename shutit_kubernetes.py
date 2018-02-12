@@ -59,7 +59,13 @@ fi
     end
   end
 end''')
-		pw = shutit.get_env_pass()
+		try:
+			pw = file('secret').read().strip()
+		except IOError:
+			pw = ''
+		if pw == '':
+			shutit.log('''================================================================================\nWARNING! IF THIS DOES NOT WORK YOU MAY NEED TO SET UP A 'secret' FILE IN THIS FOLDER!\n================================================================================''',level=logging.CRITICAL)
+			pw='nopass'
 		try:
 			shutit.multisend('vagrant up --provider ' + shutit.cfg['shutit-library.virtualization.virtualization.virtualization']['virt_method'] + " kubernetes1",{'assword for':pw,'assword:':pw},timeout=99999)
 		except NameError:
@@ -90,13 +96,43 @@ end''')
 			shutit.logout()
 		shutit.login(command='vagrant ssh ' + sorted(machines.keys())[0],check_sudo=False)
 		shutit.login(command='sudo su -',password='vagrant',check_sudo=False)
-		shutit.install('etcd')
-		shutit.install('golang')
+		shutit.run_script('''ETCD_VER=v3.3.0
+# choose either URL
+GOOGLE_URL=https://storage.googleapis.com/etcd
+GITHUB_URL=https://github.com/coreos/etcd/releases/download
+DOWNLOAD_URL=${GOOGLE_URL}
+rm -f /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz
+rm -rf /tmp/etcd-download-test && mkdir -p /tmp/etcd-download-test
+
+curl -L ${DOWNLOAD_URL}/${ETCD_VER}/etcd-${ETCD_VER}-linux-amd64.tar.gz -o /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz
+tar xzvf /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz -C /tmp/etcd-download-test --strip-components=1
+rm -f /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz
+
+/tmp/etcd-download-test/etcd --version
+<<COMMENT
+etcd Version: 3.3.0
+Git SHA: c23606781
+Go Version: go1.9.3
+Go OS/Arch: linux/amd64
+COMMENT
+
+ETCDCTL_API=3 /tmp/etcd-download-test/etcdctl version
+<<COMMENT
+etcdctl version: 3.3.0
+API version: 3.3
+COMMENT''')
+		shutit.send('export PATH=${PATH}:/tmp/etcd-download-test')
+		shutit.multisend('add-apt-repository ppa:gophers/archive',{'ENTER':''})
+		shutit.send('apt-get update')
+		shutit.install('golang-1.9-go')
 		shutit.install('openssl')
-		shutit.send('export GOPATH=/opt/go')                                                                                                                                 
-		shutit.send('export PATH=$PATH:/opt/go/bin')  
+		shutit.send('export GOROOT=/usr/lib/go-1.9')
+		shutit.send('export GOPATH=/usr/lib/go-1.9/bin')
+		shutit.send('export PATH=${PATH}:/usr/lib/go-1.9/bin')
 		shutit.send('go get -u github.com/cloudflare/cfssl/cmd/...')
-		shutit.send('PATH=$PATH:$GOPATH/bin')
+		shutit.send('git clone --depth=1 https://github.com/kubernetes/kubernetes.git')
+		shutit.send('cd kubernetes')
+		shutit.send('./hack/local-up-cluster.sh')
 		shutit.pause_point('')
 		shutit.logout()
 		shutit.logout()
@@ -113,7 +149,7 @@ To get a picture of what has been set up.''',add_final_message=True,level=loggin
 		shutit.get_config(self.module_id,'vagrant_image',default='ubuntu/xenial64')
 		shutit.get_config(self.module_id,'vagrant_provider',default='virtualbox')
 		shutit.get_config(self.module_id,'gui',default='false')
-		shutit.get_config(self.module_id,'memory',default='1024')
+		shutit.get_config(self.module_id,'memory',default='4096')
 		return True
 
 	def test(self, shutit):
