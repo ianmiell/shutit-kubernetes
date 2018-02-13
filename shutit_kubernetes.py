@@ -126,13 +126,46 @@ COMMENT''')
 		shutit.send('apt-get update')
 		shutit.install('golang-1.9-go')
 		shutit.install('openssl')
+		shutit.install('libfuse-dev')
+		shutit.install('libjson-c-dev')
+		shutit.install('apt-file')
+		shutit.send('apt-file update')
 		shutit.send('export GOROOT=/usr/lib/go-1.9')
 		shutit.send('export GOPATH=/usr/lib/go-1.9/bin')
 		shutit.send('export PATH=${PATH}:/usr/lib/go-1.9/bin')
 		shutit.send('go get -u github.com/cloudflare/cfssl/cmd/...')
+		shutit.send('git clone https://github.com/adelton/kubernetes-flexvolume-fuse')
+		# Flexvolume setup
+		shutit.send('cd /root/kubernetes-flexvolume-fuse')
+		shutit.send('mkdir -p /usr/libexec/kubernetes/kubelet-plugins/volume/exec/example.com~pod-info-fuse')
+		shutit.send('mkdir -p mkdir -p /usr/libexec/kubernetes/kubelet-plugins/volume/exec/example.com~custodia-cli-fuse')
+		shutit.send('gcc -Wall flexvolume-fuse-external.c $( pkg-config fuse json-c --cflags --libs )       -D LOG_FILE=/tmp/custodia-cli.log       -o /usr/libexec/kubernetes/kubelet-plugins/volume/exec/example.com~custodia-cli-fuse/custodia-cli-fuse')
+		shutit.send('gcc -Wall pod-info-fuse.c $( pkg-config fuse json-c --cflags --libs )       -D LOG_FILE=/tmp/pod-info.log       -o /usr/libexec/kubernetes/kubelet-plugins/volume/exec/example.com~pod-info-fuse/pod-info-fuse')
+		# Kubernetes setup
+		shutit.send('cd /root')
 		shutit.send('git clone --depth=1 https://github.com/kubernetes/kubernetes.git')
-		shutit.send('cd kubernetes')
-		shutit.send('./hack/local-up-cluster.sh')
+		shutit.send('cd /root/kubernetes')
+		shutit.send('nohup ./hack/local-up-cluster.sh 2>&1 | tee /tmp/buildout &')
+		shutit.send('export PATH=${PATH}:$(pwd)/_output/local/bin/linux/amd64')
+		shutit.send_until('kubectl get nodes','NAME')
+		shutit.send_file('/root/pod.yaml','''apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod-hashicorp
+spec:
+  containers:
+  - image: registry.access.redhat.com/rhel7
+    name: test-pod-hashicorp
+    command: ["/usr/bin/sleep"]
+    args: ["infinity"]
+    volumeMounts:
+    - mountPath: /mnt/hashicorp
+      name: hashicorp-cli
+  volumes:
+  - flexVolume:
+      driver: example.com/hashicorp-cli-fuse
+    name: hashicorp-cli''')
+		shutit.send('kubectl create -f /root/pod.yaml')
 		shutit.pause_point('')
 		shutit.logout()
 		shutit.logout()
